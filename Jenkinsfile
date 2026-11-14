@@ -22,7 +22,7 @@ pipeline {
         stage('Install dependencies') {
             steps {
                 dir('backend') {
-                    bat 'python -m pip install -r requirements.txt'
+                    bat '"C:\\Users\\maksi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe" -m pip install -r requirements.txt'
                 }
             }
         }
@@ -30,7 +30,8 @@ pipeline {
         stage('Migrate DB') {
             steps {
                 dir('backend') {
-                    bat 'python manage.py migrate'
+                    bat '"C:\\Users\\maksi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe" manage.py makemigrations tanks || echo migrations-exist'
+                    bat '"C:\\Users\\maksi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe" manage.py migrate'
                 }
             }
         }
@@ -38,7 +39,7 @@ pipeline {
         stage('Test') {
             steps {
                 dir('backend') {
-                    bat 'python -m pytest --junitxml=reports/junit.xml'
+                    bat '"C:\\Users\\maksi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe" -m pytest --junitxml=reports/junit.xml'
                 }
             }
             post {
