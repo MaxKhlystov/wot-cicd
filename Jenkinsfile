@@ -4,6 +4,7 @@ pipeline {
     environment {
         APP_NAME = "tankworld"
         APP_PORT = "8000"
+        PYTHON = "C:\\Users\\maksi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
     }
 
     options {
@@ -21,30 +22,23 @@ pipeline {
 
         stage('Install dependencies') {
             steps {
-                dir('backend') {
-                    bat '"C:\\Users\\maksi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe" -m pip install -r requirements.txt'
-                }
+                bat '"%PYTHON%" -m pip install -r requirements.txt'
             }
         }
 
         stage('Migrate DB') {
             steps {
-                dir('backend') {
-                    bat '"C:\\Users\\maksi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe" manage.py makemigrations tanks || echo migrations-exist'
-                    bat '"C:\\Users\\maksi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe" manage.py migrate'
-                }
+                bat '"%PYTHON%" manage.py migrate'
             }
         }
 
         stage('Test') {
             steps {
-                dir('backend') {
-                    bat '"C:\\Users\\maksi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe" -m pytest --junitxml=reports/junit.xml'
-                }
+                bat '"%PYTHON%" -m pytest --junitxml=reports/junit.xml'
             }
             post {
                 always {
-                    junit allowEmptyResults: true, testResults: 'backend/reports/junit.xml'
+                    junit allowEmptyResults: true, testResults: 'reports/junit.xml'
                 }
             }
         }
@@ -52,15 +46,13 @@ pipeline {
         stage('Deploy') {
             when { branch 'main' }
             steps {
-                dir('backend') {
-                    bat '''
-                        set BUILD_ID=dontKillMe
-                        set JENKINS_NODE_COOKIE=dontKillMe
-                        taskkill /F /FI "WINDOWTITLE eq tankworld-server" 2>nul || echo no-previous-process
-                        start "tankworld-server" /min cmd /c "python manage.py runserver 0.0.0.0:%APP_PORT%"
-                        echo Deployed on port %APP_PORT%
-                    '''
-                }
+                bat '''
+                    set BUILD_ID=dontKillMe
+                    set JENKINS_NODE_COOKIE=dontKillMe
+                    taskkill /F /FI "WINDOWTITLE eq tankworld-server" 2>nul || echo no-previous-process
+                    start "tankworld-server" /min cmd /c "%PYTHON% manage.py runserver 0.0.0.0:%APP_PORT%"
+                    echo Deployed on port %APP_PORT%
+                '''
             }
         }
     }
