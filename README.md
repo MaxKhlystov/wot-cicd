@@ -3,7 +3,7 @@
 Backend: Django + Django REST Framework (SQLite)
 Frontend: Vue 3 + Vite
 
-## Запуск backend локально
+## Запуск backend локально test webhook
 
     cd backend
     python -m venv venv
