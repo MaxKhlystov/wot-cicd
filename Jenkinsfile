@@ -4,65 +4,176 @@ pipeline {
     environment {
         APP_NAME = "tankworld"
         APP_PORT = "8000"
-        PYTHON = "C:\\Users\\maksi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
+
+        // Python, установленный на компьютере
+        SYSTEM_PYTHON = "C:\\Users\\maksi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
+
+        // Виртуальное окружение Jenkins
+        VENV_PYTHON = ".jenkins-venv\\Scripts\\python.exe"
+
+        // Node.js, установленный на компьютере
+        NODE_HOME = "G:\\Apps\\Others\\node"
     }
 
     options {
         timestamps()
         buildDiscarder(logRotator(numToKeepStr: '20'))
+        disableConcurrentBuilds()
+        skipDefaultCheckout(true)
     }
 
     stages {
         stage('Checkout') {
             steps {
                 checkout scm
-                bat 'echo Branch: %BRANCH_NAME%'
+
+                bat '''
+                    echo Current branch: %BRANCH_NAME%
+                    echo Workspace: %WORKSPACE%
+                '''
             }
         }
 
-        stage('Install dependencies') {
+        stage('Check environment') {
             steps {
-                bat '"%PYTHON%" -m pip install -r requirements.txt'
-            }
-        }
+                withEnv(["PATH+NODE=${env.NODE_HOME}"]) {
+                    bat '''
+                        echo Checking Python...
+                        "%SYSTEM_PYTHON%" --version
 
-        stage('Migrate DB') {
-            steps {
-                bat '"%PYTHON%" manage.py migrate'
-            }
-        }
+                        echo Checking Git...
+                        git --version
 
-        stage('Test') {
-            steps {
-                bat '"%PYTHON%" -m pytest --junitxml=reports/junit.xml'
-            }
-            post {
-                always {
-                    junit allowEmptyResults: true, testResults: 'reports/junit.xml'
+                        echo Checking Node.js...
+                        node --version
+
+                        echo Checking npm...
+                        call npm --version
+                    '''
                 }
             }
         }
 
-        stage('Deploy') {
-            when { branch 'main' }
+        stage('Create Python environment') {
             steps {
                 bat '''
+                    if not exist "%VENV_PYTHON%" (
+                        echo Creating Python virtual environment...
+                        "%SYSTEM_PYTHON%" -m venv .jenkins-venv
+                    ) else (
+                        echo Python virtual environment already exists
+                    )
+
+                    "%VENV_PYTHON%" -m pip install --upgrade pip
+                '''
+            }
+        }
+
+        stage('Install backend dependencies') {
+            steps {
+                bat '''
+                    echo Installing backend dependencies...
+                    "%VENV_PYTHON%" -m pip install -r requirements.txt
+                '''
+            }
+        }
+
+        stage('Check Django project') {
+            steps {
+                bat '''
+                    echo Running Django system check...
+                    "%VENV_PYTHON%" manage.py check
+
+                    echo Checking Django migrations...
+                    "%VENV_PYTHON%" manage.py makemigrations --check --dry-run
+                '''
+            }
+        }
+
+        stage('Test backend') {
+            steps {
+                bat '''
+                    echo Running backend tests...
+
+                    if not exist reports (
+                        mkdir reports
+                    )
+
+                    "%VENV_PYTHON%" -m pytest
+                '''
+            }
+        }
+
+        stage('Install frontend dependencies') {
+            steps {
+                withEnv(["PATH+NODE=${env.NODE_HOME}"]) {
+                    dir('client') {
+                        bat '''
+                            echo Installing frontend dependencies...
+                            call npm ci
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Build frontend') {
+            steps {
+                withEnv(["PATH+NODE=${env.NODE_HOME}"]) {
+                    dir('client') {
+                        bat '''
+                            echo Building Vue frontend...
+                            call npm run build
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Deploy main') {
+            when {
+                branch 'main'
+            }
+
+            steps {
+                bat '''
+                    echo Applying Django migrations...
+                    "%VENV_PYTHON%" manage.py migrate
+
+                    echo Stopping previous TankWorld server...
+                    taskkill /F /FI "WINDOWTITLE eq tankworld-server" 2>nul || echo Previous server was not found
+
+                    echo Starting TankWorld server...
                     set BUILD_ID=dontKillMe
                     set JENKINS_NODE_COOKIE=dontKillMe
-                    taskkill /F /FI "WINDOWTITLE eq tankworld-server" 2>nul || echo no-previous-process
-                    start "tankworld-server" /min cmd /c "%PYTHON% manage.py runserver 0.0.0.0:%APP_PORT%"
-                    echo Deployed on port %APP_PORT%
+
+                    start "tankworld-server" /min cmd /c %VENV_PYTHON% manage.py runserver 0.0.0.0:%APP_PORT%
+
+                    echo TankWorld started on port %APP_PORT%
                 '''
             }
         }
     }
 
     post {
-        success {
-            echo "Pipeline finished OK for branch ${env.BRANCH_NAME}"
+        always {
+            junit(
+                allowEmptyResults: true,
+                testResults: 'reports/junit.xml'
+            )
+
+            archiveArtifacts(
+                allowEmptyArchive: true,
+                artifacts: 'client/dist/**'
+            )
         }
+
+        success {
+            echo "Pipeline completed successfully for branch ${env.BRANCH_NAME}"
+        }
+
         failure {
-            echo "Pipeline FAILED for branch ${env.BRANCH_NAME} --- see logs above"
+            echo "Pipeline failed for branch ${env.BRANCH_NAME}. Check the stages and console output."
         }
     }
 }
