@@ -8,20 +8,18 @@ pipeline {
         // Python, установленный на компьютере
         SYSTEM_PYTHON = "C:\\Users\\maksi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
 
-        // Виртуальное окружение, создаваемое Jenkins в рабочей папке
+        // Виртуальное окружение Jenkins
         VENV_PYTHON = ".jenkins-venv\\Scripts\\python.exe"
 
         // Node.js, установленный на компьютере
         NODE_HOME = "G:\\Apps\\Others\\node"
-
-        // Добавляем Node.js в PATH внутри Jenkins Pipeline
-        PATH+NODE = "G:\\Apps\\Others\\node"
     }
 
     options {
         timestamps()
         buildDiscarder(logRotator(numToKeepStr: '20'))
         disableConcurrentBuilds()
+        skipDefaultCheckout(true)
     }
 
     stages {
@@ -38,19 +36,21 @@ pipeline {
 
         stage('Check environment') {
             steps {
-                bat '''
-                    echo Checking Python...
-                    "%SYSTEM_PYTHON%" --version
+                withEnv(["PATH+NODE=${env.NODE_HOME}"]) {
+                    bat '''
+                        echo Checking Python...
+                        "%SYSTEM_PYTHON%" --version
 
-                    echo Checking Git...
-                    git --version
+                        echo Checking Git...
+                        git --version
 
-                    echo Checking Node.js...
-                    "%NODE_HOME%\\node.exe" --version
+                        echo Checking Node.js...
+                        node --version
 
-                    echo Checking npm...
-                    call "%NODE_HOME%\\npm.cmd" --version
-                '''
+                        echo Checking npm...
+                        call npm --version
+                    '''
+                }
             }
         }
 
@@ -106,22 +106,26 @@ pipeline {
 
         stage('Install frontend dependencies') {
             steps {
-                dir('client') {
-                    bat '''
-                        echo Installing frontend dependencies...
-                        call "%NODE_HOME%\\npm.cmd" ci
-                    '''
+                withEnv(["PATH+NODE=${env.NODE_HOME}"]) {
+                    dir('client') {
+                        bat '''
+                            echo Installing frontend dependencies...
+                            call npm ci
+                        '''
+                    }
                 }
             }
         }
 
         stage('Build frontend') {
             steps {
-                dir('client') {
-                    bat '''
-                        echo Building Vue frontend...
-                        call "%NODE_HOME%\\npm.cmd" run build
-                    '''
+                withEnv(["PATH+NODE=${env.NODE_HOME}"]) {
+                    dir('client') {
+                        bat '''
+                            echo Building Vue frontend...
+                            call npm run build
+                        '''
+                    }
                 }
             }
         }
