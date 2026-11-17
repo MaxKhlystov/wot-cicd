@@ -48,10 +48,8 @@ pipeline {
             steps {
                 bat '''
                     set BUILD_ID=dontKillMe
-                    set JENKINS_NODE_COOKIE=dontKillMe
-                    taskkill /F /FI "WINDOWTITLE eq tankworld-server" 2>nul || echo no-previous-process
-                    start "tankworld-server" /min cmd /c "%PYTHON% manage.py runserver 0.0.0.0:%APP_PORT%"
-                    echo Deployed on port %APP_PORT%
+                    taskkill /F /FI "WINDOWTITLE eq tankworld-server" 2>nul
+                    start "tankworld-server" /min cmd /c "%PYTHON% manage.py runserver 0.0.0.0:8000"
                 '''
             }
         }
