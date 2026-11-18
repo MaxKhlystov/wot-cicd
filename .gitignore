@@ -1,8 +1,28 @@
+# Python
 venv/
+.jenkins-venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Django
+db.sqlite3
+*.log
+reports/
+
+# Vue
 node_modules/
 dist/
-db.sqlite3
-backend/reports/
-*.log
+client/node_modules/
+client/dist/
+client/cypress/screenshots/
+client/cypress/videos/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/

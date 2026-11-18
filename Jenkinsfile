@@ -1,13 +1,8 @@
 pipeline {
     agent any
 
-    environment {
-        APP_NAME = "tankworld"
-        APP_PORT = "8000"
-        PYTHON = "C:\\Users\\maksi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
-    }
-
     options {
+        skipDefaultCheckout(true)
         timestamps()
         buildDiscarder(logRotator(numToKeepStr: '20'))
     }
@@ -20,31 +15,22 @@ pipeline {
             }
         }
 
-        stage('Install dependencies') {
+        stage('Build Docker images') {
             steps {
-                bat '"%PYTHON%" -m pip install -r requirements.txt'
+                bat 'docker compose build'
             }
         }
 
-        stage('Migrate DB') {
+        stage('Test backend in Docker') {
             steps {
-                bat '"%PYTHON%" manage.py migrate'
+                bat 'docker compose run --rm backend python -m pytest'
             }
         }
 
-        stage('Test') {
-            steps {
-                bat '"%PYTHON%" -m pytest --junitxml=reports/junit.xml'
+        stage('Deploy containers') {
+            when {
+                branch 'main'
             }
-            post {
-                always {
-                    junit allowEmptyResults: true, testResults: 'reports/junit.xml'
-                }
-            }
-        }
-
-        stage('Deploy') {
-            when { branch 'main' }
             steps {
                 bat '''
                     set BUILD_ID=dontKillMe
@@ -57,10 +43,11 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline finished OK for branch ${env.BRANCH_NAME}"
+            echo "Docker pipeline finished successfully for ${env.BRANCH_NAME}"
         }
+
         failure {
-            echo "Pipeline FAILED for branch ${env.BRANCH_NAME} --- see logs above"
+            echo "Docker pipeline failed for ${env.BRANCH_NAME}"
         }
     }
 }
