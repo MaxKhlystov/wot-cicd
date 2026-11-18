@@ -32,8 +32,11 @@ pipeline {
                 branch 'main'
             }
             steps {
-                bat 'docker compose up -d --remove-orphans'
-                bat 'docker compose ps'
+                bat '''
+                    set BUILD_ID=dontKillMe
+                    taskkill /F /FI "WINDOWTITLE eq tankworld-server" 2>nul
+                    start "tankworld-server" /min cmd /c "%PYTHON% manage.py runserver 0.0.0.0:8000"
+                '''
             }
         }
     }
