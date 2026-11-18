@@ -1,179 +1,50 @@
 pipeline {
     agent any
 
-    environment {
-        APP_NAME = "tankworld"
-        APP_PORT = "8000"
-
-        // Python, установленный на компьютере
-        SYSTEM_PYTHON = "C:\\Users\\maksi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
-
-        // Виртуальное окружение Jenkins
-        VENV_PYTHON = ".jenkins-venv\\Scripts\\python.exe"
-
-        // Node.js, установленный на компьютере
-        NODE_HOME = "G:\\Apps\\Others\\node"
-    }
-
     options {
+        skipDefaultCheckout(true)
         timestamps()
         buildDiscarder(logRotator(numToKeepStr: '20'))
-        disableConcurrentBuilds()
-        skipDefaultCheckout(true)
     }
 
     stages {
         stage('Checkout') {
             steps {
                 checkout scm
-
-                bat '''
-                    echo Current branch: %BRANCH_NAME%
-                    echo Workspace: %WORKSPACE%
-                '''
+                bat 'echo Branch: %BRANCH_NAME%'
             }
         }
 
-        stage('Check environment') {
+        stage('Build Docker images') {
             steps {
-                withEnv(["PATH+NODE=${env.NODE_HOME}"]) {
-                    bat '''
-                        echo Checking Python...
-                        "%SYSTEM_PYTHON%" --version
-
-                        echo Checking Git...
-                        git --version
-
-                        echo Checking Node.js...
-                        node --version
-
-                        echo Checking npm...
-                        call npm --version
-                    '''
-                }
+                bat 'docker compose build'
             }
         }
 
-        stage('Create Python environment') {
+        stage('Test backend in Docker') {
             steps {
-                bat '''
-                    if not exist "%VENV_PYTHON%" (
-                        echo Creating Python virtual environment...
-                        "%SYSTEM_PYTHON%" -m venv .jenkins-venv
-                    ) else (
-                        echo Python virtual environment already exists
-                    )
-
-                    "%VENV_PYTHON%" -m pip install --upgrade pip
-                '''
+                bat 'docker compose run --rm backend python -m pytest'
             }
         }
 
-        stage('Install backend dependencies') {
-            steps {
-                bat '''
-                    echo Installing backend dependencies...
-                    "%VENV_PYTHON%" -m pip install -r requirements.txt
-                '''
-            }
-        }
-
-        stage('Check Django project') {
-            steps {
-                bat '''
-                    echo Running Django system check...
-                    "%VENV_PYTHON%" manage.py check
-
-                    echo Checking Django migrations...
-                    "%VENV_PYTHON%" manage.py makemigrations --check --dry-run
-                '''
-            }
-        }
-
-        stage('Test backend') {
-            steps {
-                bat '''
-                    echo Running backend tests...
-
-                    if not exist reports (
-                        mkdir reports
-                    )
-
-                    "%VENV_PYTHON%" -m pytest
-                '''
-            }
-        }
-
-        stage('Install frontend dependencies') {
-            steps {
-                withEnv(["PATH+NODE=${env.NODE_HOME}"]) {
-                    dir('client') {
-                        bat '''
-                            echo Installing frontend dependencies...
-                            call npm ci
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('Build frontend') {
-            steps {
-                withEnv(["PATH+NODE=${env.NODE_HOME}"]) {
-                    dir('client') {
-                        bat '''
-                            echo Building Vue frontend...
-                            call npm run build
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('Deploy main') {
+        stage('Deploy containers') {
             when {
                 branch 'main'
             }
-
             steps {
-                bat '''
-                    echo Applying Django migrations...
-                    "%VENV_PYTHON%" manage.py migrate
-
-                    echo Stopping previous TankWorld server...
-                    taskkill /F /FI "WINDOWTITLE eq tankworld-server" 2>nul || echo Previous server was not found
-
-                    echo Starting TankWorld server...
-                    set BUILD_ID=dontKillMe
-                    set JENKINS_NODE_COOKIE=dontKillMe
-
-                    start "tankworld-server" /min cmd /c %VENV_PYTHON% manage.py runserver 0.0.0.0:%APP_PORT%
-
-                    echo TankWorld started on port %APP_PORT%
-                '''
+                bat 'docker compose up -d --remove-orphans'
+                bat 'docker compose ps'
             }
         }
     }
 
     post {
-        always {
-            junit(
-                allowEmptyResults: true,
-                testResults: 'reports/junit.xml'
-            )
-
-            archiveArtifacts(
-                allowEmptyArchive: true,
-                artifacts: 'client/dist/**'
-            )
-        }
-
         success {
-            echo "Pipeline completed successfully for branch ${env.BRANCH_NAME}"
+            echo "Docker pipeline finished successfully for ${env.BRANCH_NAME}"
         }
 
         failure {
-            echo "Pipeline failed for branch ${env.BRANCH_NAME}. Check the stages and console output."
+            echo "Docker pipeline failed for ${env.BRANCH_NAME}"
         }
     }
 }

@@ -1,0 +1,27 @@
+name: tankworld
+
+services:
+  backend:
+    image: tankworld-backend
+    build:
+      context: .
+    environment:
+      DJANGO_DB_PATH: /data/db.sqlite3
+    volumes:
+      - database:/data
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  frontend:
+    image: tankworld-frontend
+    build:
+      context: ./client
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  database:
