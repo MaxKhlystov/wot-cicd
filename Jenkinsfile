@@ -2,6 +2,7 @@ pipeline {
     agent any
 
     environment {
+        PYTHON = 'C:\\Users\\maksi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe'
         KUBECONFIG = 'C:\\Users\\maksi\\.kube\\config'
     }
 
@@ -19,20 +20,30 @@ pipeline {
             }
         }
 
-        stage('Build microservice images') {
+        stage('Install test dependencies') {
+            steps {
+                bat '"%PYTHON%" -m pip install -r services\\catalog\\requirements.txt'
+                bat '"%PYTHON%" -m pip install -r services\\community\\requirements.txt'
+                bat '"%PYTHON%" -m pip install -r services\\battle\\requirements.txt'
+                bat 'cd client && npm ci'
+            }
+        }
+
+        stage('Test source before build') {
+            steps {
+                bat 'cd services\\catalog && "%PYTHON%" -m pytest -q'
+                bat 'cd services\\community && "%PYTHON%" -m pytest -q'
+                bat 'cd services\\battle && "%PYTHON%" -m pytest -q'
+                bat 'cd client && npm run build'
+            }
+        }
+
+        stage('Build Docker images') {
             steps {
                 bat 'docker build -t tankworld-catalog:latest services\\catalog'
                 bat 'docker build -t tankworld-community:latest services\\community'
                 bat 'docker build -t tankworld-battle:latest services\\battle'
                 bat 'docker build -t tankworld-frontend-k8s:latest client'
-            }
-        }
-
-        stage('Test microservices') {
-            steps {
-                bat 'docker run --rm tankworld-catalog:latest python -m pytest -q'
-                bat 'docker run --rm tankworld-community:latest python -m pytest -q'
-                bat 'docker run --rm tankworld-battle:latest python -m pytest -q'
             }
         }
 
@@ -61,7 +72,7 @@ pipeline {
         }
 
         failure {
-            echo "Kubernetes pipeline failed for ${env.BRANCH_NAME}"
+            echo "Pipeline stopped: tests, build or deployment failed for ${env.BRANCH_NAME}"
         }
     }
 }
