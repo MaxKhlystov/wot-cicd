@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    environment {
+        KUBECONFIG = 'C:\\Users\\maksi\\.kube\\config'
+    }
+
     options {
         skipDefaultCheckout(true)
         timestamps()
@@ -15,39 +19,49 @@ pipeline {
             }
         }
 
-        stage('Build Docker images') {
+        stage('Build microservice images') {
             steps {
-                bat 'docker compose build'
+                bat 'docker build -t tankworld-catalog:latest services\\catalog'
+                bat 'docker build -t tankworld-community:latest services\\community'
+                bat 'docker build -t tankworld-battle:latest services\\battle'
+                bat 'docker build -t tankworld-frontend-k8s:latest client'
             }
         }
 
-        stage('Test backend in Docker') {
+        stage('Test microservices') {
             steps {
-                bat 'docker compose run --rm backend python -m pytest'
+                bat 'docker run --rm tankworld-catalog:latest python -m pytest -q'
+                bat 'docker run --rm tankworld-community:latest python -m pytest -q'
+                bat 'docker run --rm tankworld-battle:latest python -m pytest -q'
             }
         }
 
-        stage('Deploy containers') {
+        stage('Verify Kubernetes') {
             when {
                 branch 'main'
             }
             steps {
-                bat '''
-                    set BUILD_ID=dontKillMe
-                    taskkill /F /FI "WINDOWTITLE eq tankworld-server" 2>nul
-                    start "tankworld-server" /min cmd /c "%PYTHON% manage.py runserver 0.0.0.0:8000"
-                '''
+                bat 'kubectl get nodes'
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            when {
+                branch 'main'
+            }
+            steps {
+                bat 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File k8s\\deploy.ps1'
             }
         }
     }
 
     post {
         success {
-            echo "Docker pipeline finished successfully for ${env.BRANCH_NAME}"
+            echo "Kubernetes pipeline finished successfully for ${env.BRANCH_NAME}"
         }
 
         failure {
-            echo "Docker pipeline failed for ${env.BRANCH_NAME}"
+            echo "Kubernetes pipeline failed for ${env.BRANCH_NAME}"
         }
     }
 }
